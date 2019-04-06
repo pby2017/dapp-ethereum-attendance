@@ -252,8 +252,9 @@ contract AtndContract is Owned{
     uint public allDeposit;
     bool public atndValid;
 
-    // 토큰 지급되면 호출, 출결 시스템 종료되면 호출
+    // 토큰 지급되면 호출, 출결 시스템 저장되면 호출, 종료되면 호출
     event InitTokenResponded(address _address);
+    event SetKindOfAttend(address _address);
     event EndedAtnd(address _address);
 
     constructor() public {
@@ -278,6 +279,7 @@ contract AtndContract is Owned{
     function setKindOfAttend(uint8 _kindOfAttend, address _address) public {
         // 상태 변경 0: absent, 1: late, 2: attend 
         kindOfAttend[_address] = _kindOfAttend;
+        emit SetKindOfAttend(msg.sender);
     }    
     function endAtnd(address[] memory _addresses) public {
         require(atndValid);
