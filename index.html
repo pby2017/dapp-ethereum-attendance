@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width , initial-scale=1">
+    <link rel="stylesheet" href="./static/css/style.css" type="text/css" />
+    <link rel="stylesheet" href="./static/css/bootstrap.min.css" type="text/css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="./static/js/bootstrap.min.js"></script>
+    <script type="text/javascript" src="./lib/bignumber.min.js"></script>
+    <script type="text/javascript" src="./lib/web3-light.js"></script>
+    <script type="text/javascript" src="./static/js/myContract.js"></script>
+    <script type="text/javascript">
+        var Web3 = require('web3');
+        var web3 = new Web3();
+        web3.setProvider(new web3.providers.HttpProvider('http://localhost:8544'));
+
+        // var atndContractAddress = myContractAddress;
+        // var atndContract = web3.eth.contract(abi).at(atndContractAddress);
+        var atndContractAddress = myContractAddress;
+        var atndContract = web3.eth.contract(abi).at(atndContractAddress);
+
+        var INITETH = 10000;
+        var ADD_ATND_GAS_LIMIT = 300000;
+        var INIT_TOKEN_GAS_LIMIT = 100000;
+        var WATCH_GAS_LIMIT = 21000;
+        
+        var LATE_CHECKED = 1;
+        var ATTEND_CHECKED = 2;
+
+        var depositValueForAttend = 10;
+
+        function initAtnd() {
+            var list = getAccountsList();
+            //depositValueForAttend
+            for (var i = 1; i < list.length; i++) {
+                atndContract.depositForAttend(depositValueForAttend, { from: web3.eth.coinbase, gas: ADD_ATND_GAS_LIMIT });
+            }
+        }
+        function makeAccountsSelect() {
+            var list = web3.eth.accounts;
+            var select = document.getElementById('accounts');
+            while (select.hasChildNodes()) {
+                select.removeChild(select.firstChild);
+            }
+            for (var i = 1; i < list.length; i++) {
+                var opt = document.createElement('option');
+                opt.value = list[i];
+                var weiBalance = web3.eth.getBalance(list[i]);
+                var ethBalance = Math.round(web3.fromWei(weiBalance, web3.ETH));
+                var tokenBalance = atndContract.getBalance(list[i]);
+                opt.innerHTML = list[i] + ' (' + tokenBalance + ' atnd / ' + ethBalance + ' eth)';
+                select.appendChild(opt);
+            }
+        }
+        function getAccountsList() {
+            var list = web3.eth.accounts;
+            return list;
+        }
+        function showAtndList() {
+            var list = getAccountsList();
+
+            var table = document.getElementById('atndTable');
+            while (table.hasChildNodes()) {
+                table.removeChild(table.firstChild);
+            }
+            insertForTable(table, ['번호', '식별자', '출석', '지각', 'ATND']);
+            return;
+            var atndValid = atndContract.isAtndValid();
+
+            var length = Number(list.length);
+            console.log('등록된 인원수 : ' + length);
+
+            // round all account and show table each member
+            for (var i = 1; i < list.length; i++) {
+                var atnd = atndContract.getAtnds(list[i]);
+
+                var toString = atnd.toString();
+                var strArray = toString.split(',');
+
+                // kindOfAttend, balance
+                // kindOfAttend = 0: absent(default), 1: late, 2: attend
+                // var timestamp = new Date(strArray[5] * 1000);
+                var kindOfAttend = strArray[0];
+                var balance = strArray[1];
+
+                // var btnJoinHtml = '';
+                // var btnAttendHtml = '';
+                // var btnEndHtml = '';
+                var attendCheckBoxHtml = '';
+                var lateCheckBoxHtml = '';
+                if (atndValid == 'true') {
+                    // btnJoinHtml = '<button class="btn btn-xs joinApmt" onClick="apmtJoin(' + strArray[0]
+                    //     + ')">신청하기</button>';
+                    // btnAttendHtml = '<button class="btn btn-xs attendApmt" onClick="apmtAttend(' + strArray[0]
+                    //     + ')">참석완료</button>';
+                    // btnEndHtml = '<button class="btn btn-xs endApmt" onClick="apmtEnd(' + strArray[0]
+                    //     + ')">마감하기</button>';
+                    attendCheckBoxHtml = '<input type="checkbox" >'
+                    lateCheckBoxHtml = '<input type="checkbox" >'
+                    if (kindOfAttend == 2) {
+                        attendCheckBoxHtml = '<input type="checkbox" checked>'
+                    } else if (kindOfAttend == 1) {
+                        lateCheckBoxHtml = '<input type="checkbox" checked>'
+                    }
+                }
+
+                insertForTable(table, [i, list[i], attendCheckBoxHtml, lateCheckBoxHtml, balance]);
+            }
+        }
+        function saveAtnd() {
+            var a = document.getElementById('atndTable');
+            var rowCount = a.rows.length;
+            // console.log(a.rows[0].cells[1].childNodes[0].checked);
+            for (var i = 1; i < rowCount; i++) {
+                var atndId = Number(a.rows[i].cells[0].innerHTML);
+                var atndAddress = a.rows[i].cells[1].innerHTML;
+                var attendChecked = a.rows[i].cells[2].childNodes[0].checked;
+                var lateChecked = a.rows[i].cells[3].childNodes[0].checked;
+                var balance = Number(a.rows[i].cells[4].innerHTML);
+
+                if(attendChecked){
+                    atndContract.setState(ATTEND_CHECKED, { from: web3.eth.coinbase, gas: ADD_ATND_GAS_LIMIT });
+                }else if(lateChecked){
+                    atndContract.setState(LATE_CHECKED, { from: web3.eth.coinbase, gas: ADD_ATND_GAS_LIMIT });
+                }
+            }
+        }
+
+        // function showApmtList() {
+        //     var table = document.getElementById('apmtTable');
+        //     while (table.hasChildNodes()) {
+        //         table.removeChild(table.firstChild);
+        //     }
+        //     insertForTable(table, ['번호', '제목', '보증 금액', '참가 확인 / 참가 신청', '생성 날짜', '참가 신청', '참석 확인', '마감 신청']);
+
+        //     var length = Number(atndContract.getNumberOfApmts());
+        //     console.log('등록된 약속 개수 : ' + length);
+        //     for (var i = 0; i < length; i++) {
+        //         var apmt = atndContract.getApmt(i);
+        //         var toString = apmt.toString();
+        //         var strArray = toString.split(',');
+
+        //         // Id, Name, Deposit, NumberOfAttend, NumberOfMember, Timestamp, IsValid
+        //         var timestamp = new Date(strArray[5] * 1000);
+        //         var btnJoinHtml = '';
+        //         var btnAttendHtml = '';
+        //         var btnEndHtml = '';
+        //         if (strArray[6] == 'true') {
+        //             btnJoinHtml = '<button class="btn btn-xs joinApmt" onClick="apmtJoin(' + strArray[0]
+        //                 + ')">신청하기</button>';
+        //             btnAttendHtml = '<button class="btn btn-xs attendApmt" onClick="apmtAttend(' + strArray[0]
+        //                 + ')">참석완료</button>';
+        //             btnEndHtml = '<button class="btn btn-xs endApmt" onClick="apmtEnd(' + strArray[0]
+        //                 + ')">마감하기</button>';
+        //         }
+
+        //         insertForTable(table, [strArray[0], strArray[1], strArray[2], strArray[3] + ' / ' + strArray[4], timestamp, btnJoinHtml, btnAttendHtml, btnEndHtml]);
+        //     }
+        // }
+        function insertForTable(table, arr) {
+            var arrLength = arr.length;
+            var row = table.insertRow();
+            for (var i = 0; i < arrLength; i++) {
+                row.insertCell(i).innerHTML = arr[i];
+            }
+        }
+        function watchInitTokenResponded(address, successMsg, failMsg) {
+            var initTokenEvent = atndContract.InitTokenResponded({ from: address, gas: WATCH_GAS_LIMIT });
+            console.log('initTokenEvent define - , initTokenEvent');
+            initTokenEvent.watch(function (error, result) {
+                initTokenEvent.stopWatching();
+                console.log('initTokenEvent stopWatching()');
+                if (!error) {
+                    var myInitToken = atndContract.getBalance(address);
+                    alert(successMsg);
+                    console.log(successMsg);
+                    console.log(result);
+                    makeAccountsSelect();
+                    showAtndList();
+                } else {
+                    alert(failMsg);
+                    console.log(error);
+                }
+            });
+        }
+        function watchFilter(filterOption, successMsg, failMsg) {
+            var filter = web3.eth.filter('latest');
+            console.log('filter define - ', filter);
+            filter.watch(function (error, result) {
+                filter.stopWatching()
+                console.log('filter stopWatching()');
+                if (!error) {
+                    console.log('log\n');
+                    console.log(result);
+                    makeAccountsSelect();
+                    requestInitToken();
+                    alert(successMsg);
+                } else {
+                    console.log('error\n' + error);
+                    alert(failMsg);
+                }
+            });
+        }
+        function watchApmtAdded(address, successMsg, failMsg) {
+            var addApmtEvent = atndContract.ApmtAdded({ from: address, gas: WATCH_GAS_LIMIT });
+            console.log('addApmtEvent define - ', addApmtEvent);
+            addApmtEvent.watch(function (error, result) {
+                addApmtEvent.stopWatching();
+                console.log('addApmtEvent stopWatching()');
+                if (!error) {
+                    alert(successMsg);
+                    console.log(successMsg);
+                    console.log(result);
+                    makeAccountsSelect();
+                    showApmtList();
+                } else {
+                    alert(failMsg);
+                    console.log(error);
+                }
+            });
+        }
+        function watchNotEnoughToken(address, successMsg, failMsg) {
+            var notEnoughToken = atndContract.NotEnoughToken({ from: address, gas: WATCH_GAS_LIMIT });
+            console.log('notEnoughToken define - ', notEnoughToken);
+            notEnoughToken.watch(function (error, result) {
+                notEnoughToken.stopWatching();
+                console.log('notEnoughToken stopWatching()');
+                if (!error) {
+                    alert(successMsg);
+                    console.log(successMsg);
+                    console.log(result);
+                } else {
+                    alert(failMsg);
+                    console.log(error);
+                }
+            });
+        }
+        // function watchJoinedApmt(address, successMsg, failMsg) {
+        //     var joinApmtEvent = atndContract.JoinedApmt({ from: address, gas: WATCH_GAS_LIMIT });
+        //     console.log('joinApmtEvent define - ', joinApmtEvent);
+        //     joinApmtEvent.watch(function (error, result) {
+        //         joinApmtEvent.stopWatching();
+        //         console.log('joinApmtEvent stopWatching()');
+        //         if (!error) {
+        //             alert(successMsg);
+        //             console.log(successMsg);
+        //             console.log(result);
+        //             makeAccountsSelect();
+        //             showApmtList();
+        //         } else {
+        //             alert(failMsg);
+        //             console.log(error);
+        //         }
+        //     });
+        // }
+        // function watchAttendedApmt(address, successMsg, failMsg) {
+        //     var attendApmtEvent = atndContract.AttendedApmt({ from: address, gas: WATCH_GAS_LIMIT });
+        //     console.log('attendApmtEvent define - ', attendApmtEvent);
+        //     attendApmtEvent.watch(function (error, result) {
+        //         attendApmtEvent.stopWatching();
+        //         console.log('attendApmtEvent stopWatching()');
+        //         if (!error) {
+        //             alert(successMsg);
+        //             console.log(successMsg);
+        //             console.log(result);
+        //             makeAccountsSelect();
+        //             showApmtList();
+        //         } else {
+        //             alert(failMsg);
+        //             console.log(error);
+        //         }
+        //     });
+        // }
+        function watchEndedApmt(address, successMsg, failMsg) {
+            var endApmtEvent = atndContract.EndedApmt({ from: address, gas: WATCH_GAS_LIMIT });
+            console.log('endApmtEvent define - ', endApmtEvent);
+            endApmtEvent.watch(function (error, result) {
+                endApmtEvent.stopWatching();
+                console.log('endApmtEvent stopWatching()');
+                if (!error) {
+                    alert(successMsg);
+                    console.log(successMsg);
+                    console.log(result);
+                    makeAccountsSelect();
+                    showApmtList();
+                } else {
+                    alert(failMsg);
+                    console.log(error);
+                }
+            });
+        }
+        function createAccount() {
+            var myPassphraseElement = document.getElementById('passphrase');
+            var myPassphrase = prompt("[계정 생성]새 계정 주소의 비밀번호를 입력해주세요.");
+            if (myPassphrase == null) {
+                return;
+            }
+            var newAddress = executeNewAccount(myPassphrase);
+            requestInitEther(newAddress, myPassphrase);
+        }
+        function executeNewAccount(passphrase) {
+            return web3.personal.newAccount(passphrase);
+        }
+        function requestInitEther(address, passphrase) {
+            web3.personal.unlockAccount(web3.eth.coinbase, secret);
+            web3.eth.sendTransaction({ from: web3.eth.coinbase, to: address, value: web3.toWei(INITETH, web3.ETH), gas: WATCH_GAS_LIMIT }, function (err, txHash) {
+                if (!err) {
+                    watchFilter('latest', '계정 생성 완료!', '계정 생성 실패!');
+                }
+            });
+        }
+        function requestInitToken() {
+            var myAddressElement = document.getElementById('accounts');
+            var myAddress = myAddressElement.value;
+
+            if (atndContract.isReceivedInitToken({ from: myAddress })) {
+                alert('신규 계정 토큰을 이미 받았습니다.');
+                return;
+            }
+
+            if (!checkEnoughBalance(atndContract.getTokenContractOwner(), atndContract.getInitTokenValue())) {
+                alert('신규 계정 토큰량이 부족합니다.');
+                return;
+            }
+
+            var myPassphraseElement = document.getElementById('passphrase');
+            var myPassphrase = prompt("[신규 토큰 지급]선택한 계정 주소의 비밀번호를 입력해주세요.");
+            if (myPassphrase == null) {
+                return;
+            }
+            web3.personal.unlockAccount(web3.eth.coinbase, secret);
+
+            try {
+                web3.personal.unlockAccount(myAddress, myPassphrase);
+            } catch (error) {
+                alert('올바른 비밀번호를 입력해주세요.');
+                return;
+            }
+
+            watchInitTokenResponded(myAddress, '신규 계정 토큰 획득 성공!', '신규 계정 토큰 획득 실패!');
+
+            atndContract.requestInitToken({ from: myAddress, gas: INIT_TOKEN_GAS_LIMIT });
+        }
+        // function apmtCreate() {
+        //     var myAddressElement = document.getElementById('accounts');
+        //     var myAddress = myAddressElement.value;
+        //     var myPassphrase = prompt("선택한 계정 주소의 비밀번호를 입력해주세요.");
+        //     if (myPassphrase == null) {
+        //         return;
+        //     }
+
+        //     try {
+        //         web3.personal.unlockAccount(myAddress, myPassphrase);
+        //     } catch (error) {
+        //         alert('올바른 비밀번호를 입력해주세요.');
+        //         return;
+        //     }
+
+        //     var nameElement = document.getElementById('apmtName');
+        //     var name = nameElement.value;
+        //     var depositElement = document.getElementById('apmtDeposit');
+        //     var deposit = Number(depositElement.value);
+
+        //     if (!checkEnoughBalance(myAddress, deposit)) {
+        //         alert('토큰 부족!')
+        //         return;
+        //     }
+
+        //     watchApmtAdded(myAddress, '약속 등록 성공!', '약속 등록 실패!');
+
+        //     atndContract.addApmt(name, deposit, { from: myAddress, gas: ADD_ATND_GAS_LIMIT });
+        // }
+        function checkEnoughBalance(address, token) {
+            var myToken = atndContract.getBalance(address);
+            if (Number(myToken) < token) {
+                return false;
+            } else {
+                return true;
+            }
+        }
+        // function apmtJoin(apmtId) {
+        //     var myAddressElement = document.getElementById('accounts');
+        //     var myAddress = myAddressElement.value;
+        //     var myPassphrase = prompt("선택한 계정 주소의 비밀번호를 입력해주세요.");
+        //     if (myPassphrase == null) {
+        //         return;
+        //     }
+
+        //     try {
+        //         web3.personal.unlockAccount(myAddress, myPassphrase);
+        //     } catch (error) {
+        //         alert('올바른 비밀번호를 입력해주세요.');
+        //         return;
+        //     }
+
+        //     var apmtNumber = apmtId;
+
+        //     var numberOfApmts = atndContract.getNumberOfApmts();
+        //     if (numberOfApmts <= 0) {
+        //         alert('아직 약속이 없습니다.');
+        //         return;
+        //     }
+
+        //     if (!atndContract.isApmtValid(apmtNumber)) {
+        //         alert('유효하지 않은 약속 번호입니다.');
+        //         return;
+        //     }
+
+        //     if (atndContract.isAlreadyJoin(apmtNumber, { from: myAddress })) {
+        //         alert('이미 참가 신청을 했습니다.');
+        //         return;
+        //     }
+
+        //     var deposit = atndContract.getRequiredDeposit(apmtNumber);
+
+        //     if (!checkEnoughBalance(myAddress, deposit)) {
+        //         alert('토큰 부족!')
+        //         return;
+        //     }
+
+        //     watchJoinedApmt(myAddress, '참가 신청 성공!', '참가 신청 실패!');
+
+        //     atndContract.joinApmt(apmtNumber, { from: myAddress, gas: ADD_ATND_GAS_LIMIT });
+        // }
+
+        // function apmtAttend(apmtId) {
+        //     var myAddressElement = document.getElementById('accounts');
+        //     var myAddress = myAddressElement.value;
+        //     var myPassphrase = prompt("선택한 계정 주소의 비밀번호를 입력해주세요.");
+        //     if (myPassphrase == null) {
+        //         return;
+        //     }
+
+        //     try {
+        //         web3.personal.unlockAccount(myAddress, myPassphrase);
+        //     } catch (error) {
+        //         alert('올바른 비밀번호를 입력해주세요.');
+        //         return;
+        //     }
+
+        //     var apmtNumber = apmtId;
+
+        //     var numberOfApmts = atndContract.getNumberOfApmts();
+        //     if (numberOfApmts <= 0) {
+        //         alert('아직 약속이 없습니다.');
+        //         return;
+        //     }
+
+        //     if (!atndContract.isApmtValid(apmtNumber)) {
+        //         alert('유효하지 않은 약속 번호입니다.');
+        //         return;
+        //     }
+
+        //     if (!atndContract.isAlreadyJoin(apmtNumber, { from: myAddress })) {
+        //         alert('참가 신청한 약속이 아닙니다.');
+        //         return;
+        //     }
+        //     console.log(atndContract);
+        //     if (atndContract.isAlreadyAttend(apmtNumber, { from: myAddress })) {
+        //         alert('이미 참석 확인을 했습니다.');
+        //         return;
+        //     }
+
+        //     watchAttendedApmt(myAddress, '약속 참석하기 성공!', '약속 참석하기 실패!');
+
+        //     atndContract.attendApmt(apmtNumber, { from: myAddress, gas: ADD_ATND_GAS_LIMIT });
+        // }
+
+        function endAtnd() {
+            saveAtnd();
+            // TODO: implement
+            
+        }
+        function apmtEnd(apmtId) {
+            var myAddressElement = document.getElementById('accounts');
+            var myAddress = myAddressElement.value;
+            var myPassphrase = prompt("선택한 계정 주소의 비밀번호를 입력해주세요.");
+            if (myPassphrase == null) {
+                return;
+            }
+
+            try {
+                web3.personal.unlockAccount(myAddress, myPassphrase);
+            } catch (error) {
+                alert('올바른 비밀번호를 입력해주세요.');
+                return;
+            }
+
+            var apmtNumber = apmtId;
+
+            var numberOfApmts = atndContract.getNumberOfApmts();
+            if (numberOfApmts <= 0) {
+                alert('아직 약속이 없습니다.');
+                return;
+            }
+
+            if (!atndContract.isApmtValid(apmtNumber)) {
+                alert('유효하지 않은 약속 번호입니다.');
+                return;
+            }
+
+            if (atndContract.getApmtOwner(apmtNumber) != myAddress) {
+                alert('권한이 없습니다.');
+                return;
+            }
+
+            watchEndedApmt(myAddress, '약속 마감 성공!', '약속 마감 실패!');
+
+            atndContract.endApmt(apmtNumber, { from: myAddress, gas: ADD_ATND_GAS_LIMIT });
+        }
+    </script>
+</head>
+
+<body>
+    <nav class="navbar navbar-default">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse"
+                data-target="#apmt-example-navbar-collapse-1">
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+        </div>
+        <div class="collapse navbar-collapse" id="apmt-example-navbar-collapse-1">
+            <ul class="nav navbar-nav navbar-right">
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button">계정관리
+                        <span class="caret"></span></button>
+                        <ul class="dropdown-menu">
+                            <li><a href="#" onClick="createAccount()">계정 생성하기</a></li>
+                            <li><a href="#" onClick="requestInitToken()">신규 계정 토큰 요청</a></li>
+                        </ul>
+                </li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+                <li><a>계정선택 <select name="creator" id="accounts"></select></a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h4>※ 사용법은 하단에 작성되어 있습니다.</h4>
+        <div class="row">
+            <div style="width: 100%; margin: auto;">
+                <!-- <h1>약속 관리</h1> -->
+                <h1>출결 관리</h1>
+                <div class="text-right">
+                    <!-- <input type="text" id="apmtName" placeholder="약속 제목"> -->
+                    <!-- <input type="text" id="apmtDeposit" placeholder="약속 참가 보증금"> -->
+                    <!-- <button class="btn btn-primary createApmt" onClick="apmtCreate()">약속 등록하기</button> -->
+                    <button class="btn btn-primary" onClick="saveAtnd()">출결 저장</button>
+                    <button class="btn btn-primary" onClick="endAtnd()">출결 종료</button>
+                </div>
+                <div>
+                    <!-- <table style="width: 100%; text-align: center;" id="apmtTable"></table> -->
+                    <table style="width: 100%; text-align: center;" id="atndTable">
+                        <tr>
+                            <td>ff1</td>
+                            <td><input type='checkbox' name='hiname' value='hivalue' checked></td>
+                        </tr>
+                        <tr>
+                            <td>ff2</td>
+                            <td>aa2</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <hr>
+        <h1>사용법</h1>
+        <h4>&lt;공통 사항&gt;</h4>
+        1. 모든 버튼 클릭시 '비밀번호'를 입력 해야합니다.
+        <h4>&lt;계정관리 - 계정 생성&gt;</h4>
+        1. 우측 상단의 '계정 관리' 버튼을 누릅니다.
+        2. '계정 생성하기' 버튼을 누릅니다.
+        <h4>&lt;계정관리 - 신규 계정 토큰 요청&gt;</h4>
+        1. 우측 상단의 '계정 관리' 버튼을 누릅니다.
+        2. '신규 계정 토큰 요청' 버튼을 누릅니다.
+        <h4>&lt;약속 등록하기&gt;</h4>
+        1. '약속 제목'과 '약속 참가 보증금'을 입력합니다.<br>
+        2. '약속 등록하기' 버튼을 누릅니다.
+        <h4>&lt;약속 참가 신청하기 / 참석하기 / 마감하기 - 공통사항&gt;</h4>
+        ※ 토큰이 필요합니다.
+        <h4>&lt;약속 관리 - 약속 참가 신청하기&gt;</h4>
+        1. 약속관리 목록에서 참가 신청 항목 아래 '신청하기' 버튼을 누릅니다.
+        <h4>&lt;약속 관리 - 약속 참석하기&gt;</h4>
+        1. 약속관리 목록에서 참석 확인 항목 아래 '참석완료' 버튼을 누릅니다.
+        <h4>&lt;약속 관리 - 약속 마감하기&gt; </h4>
+        1. 약속관리 목록에서 마감 신청 항목 아래 '마감하기' 버튼을 누릅니다.
+        <br>
+        <br>
+    </div>
+
+    <script>
+        // initAtnd();
+        makeAccountsSelect();
+        // showApmtList();
+        showAtndList();
+        // var a = document.getElementById('atndTable');
+        // console.log(a.rows[0].cells[0].innerHTML)
+        // console.log(a.rows[0].cells[1].childNodes[0].checked)
+    </script>
+</body>
+
+</html>
